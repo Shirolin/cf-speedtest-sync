@@ -27,8 +27,8 @@ setup_cfst() {
     if [ -f "$CFST_BIN" ]; then return 0; fi
     ARCH=$(uname -m)
     case "$ARCH" in
-        aarch64) PKG="CloudflareST_linux_arm64.tar.gz" ;;
-        x86_64)  PKG="CloudflareST_linux_amd64.tar.gz" ;;
+        aarch64) PKG="cfst_linux_arm64.tar.gz" ;;
+        x86_64)  PKG="cfst_linux_amd64.tar.gz" ;;
         *) echo "[ERROR] Unsupported arch: $ARCH"; exit 1 ;;
     esac
     local mirror=$(get_config ".DownloadMirror")
@@ -37,8 +37,7 @@ setup_cfst() {
     local url="${mirror}https://github.com/XIU2/CloudflareSpeedTest/releases/latest/download/$PKG"
     curl -sL -o "/tmp/$PKG" "$url" || exit 1
     mkdir -p "$CORE_DIR"
-    tar -zxf "/tmp/$PKG" -C "$CORE_DIR" CloudflareST
-    mv "$CORE_DIR/CloudflareST" "$CFST_BIN"
+    tar -zxf "/tmp/$PKG" -C "$CORE_DIR" cfst
     chmod +x "$CFST_BIN"
     rm -f "/tmp/$PKG"
 }
