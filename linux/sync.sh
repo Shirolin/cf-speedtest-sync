@@ -43,32 +43,16 @@ get_config() {
 dnspod_api() {
     local action=$1
     local payload=$2
-    local secret_id=$(get_config ".SecretId")
-    local secret_key=$(get_config ".SecretKey")
-    local service="dnspod"
-    local version="2021-03-23"
-    local host="dnspod.tencentcloudapi.com"
-    local timestamp=$(date +%s)
-    local date=$(date -u -d "@$timestamp" +"%Y-%m-%d" 2>/dev/null || date -u +"%Y-%m-%d")
     
-    local algorithm="TC3-HMAC-SHA256"
-    local ct="application/json; charset=utf-8"
-    local hashed_payload=$(printf "%s" "$payload" | openssl dgst -sha256 | sed 's/.* //')
-    local canonical_request="POST\n/\n\ncontent-type:$ct\nhost:$host\n\ncontent-type;host\n$hashed_payload"
-    local credential_scope="$date/$service/tc3_request"
-    local hashed_canonical_request=$(printf "%b" "$canonical_request" | openssl dgst -sha256 | sed 's/.* //')
-    local string_to_sign="$algorithm\n$timestamp\n$credential_scope\n$hashed_canonical_request"
+    if ! command -v python3 >/dev/null 2>&1; then
+        log "[ERROR] python3 is required for API requests but not found. Please install python3."
+        echo '{"Response":{"Error":{"Code":"MissingDependency", "Message":"python3 not found"}}}'
+        return 1
+    fi
     
-    hmac_sha256() { printf "%s" "$2" | openssl dgst -sha256 -hmac "$1" -binary; }
-    local k_date=$(hmac_sha256 "TC3$secret_key" "$date")
-    local k_service=$(hmac_sha256 "$k_date" "$service")
-    local k_signing=$(hmac_sha256 "$k_service" "tc3_request")
-    local signature=$(printf "%s" "$string_to_sign" | openssl dgst -sha256 -hmac "$k_signing" | sed 's/.* //')
+    local resp=$(python3 "$SCRIPT_DIR/dnspod.py" "$action" "$payload")
     
-    local auth="$algorithm Credential=$secret_id/$credential_scope, SignedHeaders=content-type;host, Signature=$signature"
-    local resp=$(curl -s -X POST "https://$host" -H "Authorization: $auth" -H "Content-Type: $ct" -H "X-TC-Action: $action" -H "X-TC-Version: $version" -H "X-TC-Timestamp: $timestamp" -d "$payload")
-    
-    if echo "$resp" | jq -e '.Response.Error' > /dev/null; then
+    if echo "$resp" | jq -e '.Response.Error' > /dev/null 2>&1; then
         log "[ERROR] DNSPod $action failed: $(echo "$resp" | jq -r '.Response.Error.Message')"
     fi
     echo "$resp"
