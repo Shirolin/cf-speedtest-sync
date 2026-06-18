@@ -139,7 +139,7 @@ function Run-Sync {
                 }
             }
         } catch {
-            $errMsg = "Error syncing $sub: $($_.Exception.Message)"
+            $errMsg = "Error syncing $($sub): $($_.Exception.Message)"
             Write-Warning $errMsg
             $syncLogs.Add("[!] ($sub) Sync FAILED: $($_.Exception.Message)")
             continue # 错误隔离：一个子域名失败不影响其他子域名
