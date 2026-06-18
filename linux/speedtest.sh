@@ -2,6 +2,10 @@
 # Cloudflare SpeedTest Auto-Pilot (Speedtest Module)
 # Author: Gemini CLI
 
+# --- 提升系统限制 ---
+# 解决 iStoreOS 上运行 cfst 报 too many open files 的问题
+ulimit -n 4096 2>/dev/null
+
 # --- 初始化环境 ---
 SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
@@ -24,7 +28,7 @@ get_config() { jq -r "$1" "$CONFIG_FILE" 2>/dev/null; }
 
 # --- 下载 CloudflareST ---
 setup_cfst() {
-    if [ -f "$CFST_BIN" ]; then return 0; fi
+    if [ -f "$CFST_BIN" ] && [ -x "$CFST_BIN" ]; then return 0; fi
     ARCH=$(uname -m)
     case "$ARCH" in
         aarch64) PKG="cfst_linux_arm64.tar.gz" ;;
@@ -35,9 +39,18 @@ setup_cfst() {
     [ "$mirror" = "null" ] && mirror=""
     [ "$QUIET" = "false" ] && echo ">>> Downloading CloudflareST..."
     local url="${mirror}https://github.com/XIU2/CloudflareSpeedTest/releases/latest/download/$PKG"
-    curl -sL -o "/tmp/$PKG" "$url" || exit 1
+    
     mkdir -p "$CORE_DIR"
-    tar -zxf "/tmp/$PKG" -C "$CORE_DIR" cfst
+    # 下载并校验
+    if ! curl -sL -o "/tmp/$PKG" "$url"; then
+        echo "[ERROR] Download failed from $url"
+        exit 1
+    fi
+    if ! tar -zxf "/tmp/$PKG" -C "$CORE_DIR" cfst >/dev/null 2>&1; then
+        echo "[ERROR] Extraction failed. The downloaded file might be corrupted."
+        rm -f "/tmp/$PKG"
+        exit 1
+    fi
     chmod +x "$CFST_BIN"
     rm -f "/tmp/$PKG"
 }
@@ -59,10 +72,16 @@ run_type_speedtest() {
     local flags="-f $ip_file -url $(get_config "$config_key.SpeedTestURL") -httping -n $(get_config "$config_key.Threads") -dn $(get_config "$config_key.DownloadCount") -tl $(get_config "$config_key.LatencyLimit") -o $output_csv -p 0"
     [ "$type" = "IPv6" ] && flags="$flags -ipv6"
 
+    # 完全静默内核输出
     if [ "$QUIET" = "true" ]; then
-        "$CFST_BIN" $flags > /dev/null 2>&1
+        "$CFST_BIN" $flags >/dev/null 2>&1
     else
         "$CFST_BIN" $flags
+    fi
+    
+    if [ ! -f "$output_csv" ] || [ ! -s "$output_csv" ]; then
+        echo "[ERROR] Speedtest failed to generate a valid report for $type."
+        return 1
     fi
 }
 
