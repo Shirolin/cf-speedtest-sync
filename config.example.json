@@ -1,0 +1,25 @@
+{
+    "DNSProvider": "dnspod",
+    "SecretId": "YOUR_SECRET_ID",
+    "SecretKey": "YOUR_SECRET_KEY",
+    "DownloadMirror": "https://ghproxy.com/",
+    "Domain": "example.com",
+    "SubDomain": ["cdn", "www"],
+    "Lines": ["电信", "联通", "移动", "默认"],
+    "IPv4": {
+        "Enable": true,
+        "File": "ip.txt",
+        "Threads": 50,
+        "DownloadCount": 2,
+        "LatencyLimit": 250,
+        "SpeedTestURL": "https://speed.cloudflare.com/__down?bytes=100000000"
+    },
+    "IPv6": {
+        "Enable": false,
+        "File": "ipv6.txt",
+        "Threads": 50,
+        "DownloadCount": 2,
+        "LatencyLimit": 250,
+        "SpeedTestURL": "https://speed.cloudflare.com/__down?bytes=100000000"
+    }
+}

@@ -1,0 +1,15 @@
+# --- 敏感信息 ---
+config.json
+
+# --- 运行时生成的临时数据 ---
+results_speedtest.csv
+SPEEDTEST_REPORT.md
+core/results.csv
+core/results_speedtest.csv
+
+# --- 系统与编辑器 ---
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.tmp
