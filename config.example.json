@@ -4,7 +4,7 @@
     "SecretKey": "YOUR_SECRET_KEY",
     "DownloadMirror": "https://ghproxy.com/",
     "Domain": "example.com",
-    "SubDomain": ["cdn", "www"],
+    "SubDomain": ["cdn.splatfun", "splatfun", "cdn.raiders", "raiders"],
     "Lines": ["电信", "联通", "移动", "默认"],
     "IPv4": {
         "Enable": true,

@@ -24,9 +24,9 @@ function HMAC256 {
 $configPath = "$scriptPath\config.json"
 $config = Get-Content $configPath -Raw -Encoding utf8 | ConvertFrom-Json
 
-$targetUrl = "https://speed.cloudflare.com/__down?bytes=100000000"
+$targetUrl = $config.IPv4.SpeedTestURL
 $cfst = "core\cfst.exe"
-$ipList = "core\ip.txt"
+$ipList = "core\" + $config.IPv4.File
 $outputCsv = "results_speedtest.csv"
 $reportMd = "SPEEDTEST_REPORT.md"
 $syncLogs = New-Object System.Collections.Generic.List[string]
@@ -79,7 +79,7 @@ function Invoke-TencentApi {
 function Run-Speedtest {
     Write-Host ">>> [1/3] Speedtest Running..." -ForegroundColor Cyan
     Remove-Item $outputCsv -ErrorAction SilentlyContinue
-    $args = "-f core\ip.txt -url $targetUrl -httping -n $($config.Threads) -dn $($config.DownloadCount) -tl $($config.LatencyLimit) -o $outputCsv -p 0"
+    $args = "-f $ipList -url $targetUrl -httping -n $($config.IPv4.Threads) -dn $($config.IPv4.DownloadCount) -tl $($config.IPv4.LatencyLimit) -o $outputCsv -p 0"
     Start-Process -FilePath $cfst -ArgumentList $args -Wait -NoNewWindow
 }
 
@@ -93,7 +93,7 @@ function Run-Sync {
         $all.Add([PSCustomObject]@{ IP=$p[0]; Latency=[double]$p[4]; Speed=[double]$p[5]; Colo=$p[6] })
     }
     
-    $bestIps = $all | Sort-Object @{Expression="Speed"; Descending=$true}, @{Expression="Latency"; Ascending=$true} | Select-Object -First $config.DownloadCount -ExpandProperty IP
+    $bestIps = $all | Sort-Object @{Expression="Speed"; Descending=$true}, @{Expression="Latency"; Ascending=$true} | Select-Object -First $config.IPv4.DownloadCount -ExpandProperty IP
     
     # [安全锁] 如果测速结果为空，严禁进入同步流程，防止误删线上记录
     if ($null -eq $bestIps -or $bestIps.Count -eq 0) {
