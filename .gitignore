@@ -13,3 +13,6 @@ core/results_speedtest.csv
 .DS_Store
 *.log
 *.tmp
+results_raiders.csv
+RAIDERS_REPORT.md
+core/results_raiders.csv
