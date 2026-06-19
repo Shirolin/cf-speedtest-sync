@@ -94,6 +94,22 @@ sh linux/optimize.sh install
 - **自动加锁**：防止多个进程同时运行导致冲突。
 - **智能日志**：支持自动日志轮转，防止占用过多空间。
 
+## 📊 查看同步日志
+
+项目会自动将 IP 同步记录写入到 `output/<你的域名>/sync.log`。为了方便查看历史轨迹，项目提供了查询过去一周（7天内）IP 同步日志的脚本：
+
+### Windows 平台
+在项目根目录下运行：
+```powershell
+powershell -ExecutionPolicy Bypass -File view_logs.ps1
+```
+
+### Linux 平台
+在项目根目录下运行：
+```bash
+sh linux/view_logs.sh
+```
+
 ## 🤝 鸣谢与声明
 
 本项目的本地测速模块依赖并集成了优秀的开源项目 [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)（简称 `cfst`）。在此向原作者 [XIU2](https://github.com/XIU2) 表达诚挚的感谢！
