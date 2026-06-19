@@ -54,8 +54,9 @@ while IFS= read -r line; do
     # Extract date from [YYYY-MM-DD HH:MM:SS]
     case "$line" in
         \[[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*)
-            log_date=$(echo "$line" | cut -d' ' -f1 | tr -d '[]')
-            if [ "$log_date" ] && [ "$log_date" \>= "$THRESHOLD_DATE" ]; then
+            log_date=$(echo "$line" | cut -d' ' -f1 | tr -d '[]-')
+            threshold_num=$(echo "$THRESHOLD_DATE" | tr -d '-')
+            if [ "$log_date" ] && [ "$log_date" -ge "$threshold_num" ]; then
                 echo "$line"
             fi
             ;;
