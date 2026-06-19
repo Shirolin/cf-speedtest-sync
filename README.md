@@ -47,8 +47,27 @@
 
 2. **配置信息**
    将 `config.example.json` 复制为 `config.json` 并填写你的信息。
-   - **`IPSource`**：设置默认为 `"local"`, `"api"` 或 `"saas"`。
-   - **`Lines`**：托管的运营商线路。若想确保 Cloudflare SaaS 证书有效和海外最优路由，建议设为 `["境内"]`，并将 DNSPod 的 `默认` 线路在后台手动配置为 CNAME 回源。
+   
+   #### ⚙️ 配置参数详解
+   
+   | 参数项 | 默认值 | 释义 |
+   | :--- | :--- | :--- |
+   | `DNSProvider` | `"dnspod"` | DNS 解析提供商。当前支持 `"dnspod"` (腾讯云)。 |
+   | `IPSource` | `"local"` | 优选 IP 来源。`"local"` 本机测速 / `"api"` 第三方优选 API / `"saas"` 大厂影子网段优选。 |
+   | `Api.IPv4` | `"https://ipdb.api.030101.xyz/?type=bestcf"` | 第三方优选 IPv4 接口地址（仅在 `IPSource` 设为 `"api"` 时生效）。 |
+   | `SecretId` | `"YOUR_SECRET_ID"` | 腾讯云 API 密钥 SecretId。 |
+   | `SecretKey` | `"YOUR_SECRET_KEY"` | 腾讯云 API 密钥 SecretKey。 |
+   | `Domain` | `"example.com"` | 托管的主域名。 |
+   | `SubDomain` | `["cdn"]` | 待优选绑定的子域名数组（支持多个）。 |
+   | `Lines` | `["电信", "联通", "移动"]` | 托管解析的运营商线路。如用 CNAME 回源 SaaS，推荐仅托管 `["境内"]`，并保持 `默认` 线路为 CNAME。 |
+   | `IPv4.Enable` | `true` | 是否启用 IPv4 测速与同步。 |
+   | `IPv4.File` | `"ip.txt"` | 本机测速时使用的 CF 原始 IP 范围文件（位于 `core/` 下）。 |
+   | `IPv4.Threads` | `50` | 测速并发线程数。 |
+   | `IPv4.DownloadCount` | `2` | 最终在 DNS 中绑定的优选 IP 数量。 |
+   | `IPv4.LatencyLimit` | `250` | 延迟上限门槛（单位 ms），超过该延迟的 IP 丢弃。 |
+   | `IPv4.SpeedTestURL` | `"https://speed.cloudflare.com/__down?bytes=100000000"` | 测速下载接口（使用 Cloudflare 官方测速大文件，按需截断不消耗整包）。 |
+
+   - 支持 IPv4 和 IPv6 分别配置。
 
 3. **运行脚本**
    - **Windows**: 
