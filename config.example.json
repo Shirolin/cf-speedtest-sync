@@ -10,10 +10,9 @@
     "DownloadMirror": "https://ghproxy.com/",
     "Domain": "example.com",
     "SubDomain": [
-        "cdn.splatfun",
-        "splatfun",
-        "cdn.raiders",
-        "raiders"
+        "cdn",
+        "www",
+        "api"
     ],
     "Lines": [
         "电信",
