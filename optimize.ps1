@@ -148,17 +148,21 @@ function Run-Sync {
 
             # 阶段 1: 清理无效记录并统计有效记录
             foreach ($r in $onlineRecords) {
-                $isCorrectType = ($r.Type -eq "A")
-                $isBestIp = ($bestIps -contains $r.Value)
                 $isConfiguredLine = ($config.Lines -contains $r.Line)
 
-                if (-not ($isCorrectType -and $isBestIp -and $isConfiguredLine)) {
-                    Invoke-TencentApi -Action "DeleteRecord" -Payload @{Domain=$config.Domain; RecordId=$r.RecordId} | Out-Null
-                    $syncLogs.Add("[-] ($sub) Deleted ($($r.Line)): $($r.Value)")
-                    Start-Sleep -Milliseconds 300
-                } else {
-                    # 记录依然有效的 (线路+IP) 组合
-                    $validOnline.Add("$($r.Line)_$($r.Value)") | Out-Null
+                # 仅对配置在 Lines 数组中的解析线路进行管理，完全不干涉其他线路（如 CNAME 默认/境外等）
+                if ($isConfiguredLine) {
+                    $isCorrectType = ($r.Type -eq "A")
+                    $isBestIp = ($bestIps -contains $r.Value)
+
+                    if (-not ($isCorrectType -and $isBestIp)) {
+                        Invoke-TencentApi -Action "DeleteRecord" -Payload @{Domain=$config.Domain; RecordId=$r.RecordId} | Out-Null
+                        $syncLogs.Add("[-] ($sub) Deleted ($($r.Line)): $($r.Value)")
+                        Start-Sleep -Milliseconds 300
+                    } else {
+                        # 记录依然有效的 (线路+IP) 组合
+                        $validOnline.Add("$($r.Line)_$($r.Value)") | Out-Null
+                    }
                 }
             }
 

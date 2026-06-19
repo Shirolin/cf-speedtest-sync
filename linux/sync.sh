@@ -133,12 +133,14 @@ run_sync() {
             local is_cfg_line=false
             for l in $lines; do [ "$l" = "$r_line" ] && is_cfg_line=true && break; done
 
-            if [ "$is_best" = "true" ] && [ "$is_cfg_line" = "true" ]; then
-                matches="$matches ${r_line}_${r_value}"
-            else
-                log "[-] ($sub) Deleting ($r_line): $r_value"
-                [ "$DRY_RUN" != "true" ] && dns_dispatch "DeleteRecord" "{\"Domain\":\"$domain\",\"RecordId\":$r_id}" > /dev/null
-                sleep 1
+            if [ "$is_cfg_line" = "true" ]; then
+                if [ "$is_best" = "true" ]; then
+                    matches="$matches ${r_line}_${r_value}"
+                else
+                    log "[-] ($sub) Deleting ($r_line): $r_value"
+                    [ "$DRY_RUN" != "true" ] && dns_dispatch "DeleteRecord" "{\"Domain\":\"$domain\",\"RecordId\":$r_id}" > /dev/null
+                    sleep 1
+                fi
             fi
         done
 
