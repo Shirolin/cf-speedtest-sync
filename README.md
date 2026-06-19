@@ -8,18 +8,23 @@
 ## 🚀 核心功能
 
 - **全平台支持**：原生支持 Windows (PowerShell) 及 Linux/iStoreOS (Shell)。
-- **多子域名同步**：支持单次测速结果同步至多个子域名（如 `www`, `cdn` 等）。
+- **多样化数据源 (IPSource)**：
+  - **本机测速 (`local`)**：使用本地运行的 `cfst` 内核，精准测试并选取适合您当前宽带的 IP。
+  - **第三方优选 API (`api`)**：拉取全国范围内的综合优选 IP，解决本地网络偏颇、不具备高宽带测速的痛点。
+  - **影子优选 (`saas`)**：从高可用的大厂 SaaS 域名（如 Discord, Zoom, Pages 等）中自动抓取并扩展活跃的企业级 /24 网段，在不耗费大量外部接口流量下本地优选。
+- **目录归档与隔离**：所有生成的中间 CSV 结果、最终 Markdown 报告和日志，都将按照配置中的 `Domain` 分门别类存储在 `output/<Domain>/` 目录下，保持项目目录整洁。
+- **精细化线路安全隔离**：DNS 同步删除逻辑**仅对配置在 `Lines` 中的解析线路生效**。这能让您安全地在 DNSPod 中把 `"默认"` (Default) 或 `"境外"` (Overseas) 线路配置为 CNAME 记录回源（防止影响 Cloudflare SaaS 证书校验），同时放心地让脚本只托管国内的 `"境内"` (A 记录) 或各运营商线路。
 - **智能同步逻辑**：
-    - **安全锁**：测速失败自动停止同步，防止误删现有解析。
-    - **增量更新**：仅当 IP 发生变动时才调用 API，极大减少 API 消耗。
-    - **限流保护**：内置写操作延时，避开 DNS 提供商的频率限制。
+  - **安全锁**：测速失败自动停止同步，防止误删现有解析。
+  - **增量更新**：仅当 IP 发生变动时才调用 API，极大减少 API 消耗。
+  - **限流保护**：内置写操作延时，避开 DNS 提供商的频率限制。
 - **架构适配**：Linux 版脚本自动识别并下载 `x86_64` 或 `aarch64` (R4S/R5S) 架构的测速内核。
 - **多提供商计划**：目前已支持 **DNSPod (腾讯云)**，即将支持 **阿里云 DNS**、**Cloudflare API** 等。
 
 ## 🛠️ 安装要求
 
 ### Windows / WSL
-- PowerShell 7+ (Windows) 或 Bash (WSL)
+- PowerShell 5.1+ 或 PowerShell 7+ (Windows) / Bash (WSL)
 - 已经获取腾讯云 API 密钥 (`SecretId`, `SecretKey`)
 
 ### iStoreOS (R4S 等)
@@ -42,14 +47,17 @@
 
 2. **配置信息**
    将 `config.example.json` 复制为 `config.json` 并填写你的信息。
-   - 现在支持 IPv4 和 IPv6 分别配置。
-   - 支持自定义测速链接。
+   - **`IPSource`**：设置默认为 `"local"`, `"api"` 或 `"saas"`。
+   - **`Lines`**：托管的运营商线路。若想确保 Cloudflare SaaS 证书有效和海外最优路由，建议设为 `["境内"]`，并将 DNSPod 的 `默认` 线路在后台手动配置为 CNAME 回源。
 
 3. **运行脚本**
-   - **Windows**: `pwsh optimize.ps1`
+   - **Windows**: 
+     - 默认运行: `powershell -ExecutionPolicy Bypass -File optimize.ps1`
+     - 指定数据源: `powershell -ExecutionPolicy Bypass -File optimize.ps1 -Source [local|api|saas]`
    - **Linux/iStoreOS**:
-     - 测试运行（不修改 DNS）: `sh linux/optimize.sh test`
-     - 正式运行: `sh linux/optimize.sh`
+     - 默认运行: `sh linux/optimize.sh`
+     - 指定数据源: `sh linux/optimize.sh --source [local|api|saas]`
+     - 安全测试模式（不修改 DNS）: `sh linux/optimize.sh test`
 
 ## 📅 自动化运行 (Crontab)
 
@@ -59,16 +67,13 @@ sh linux/optimize.sh install
 ```
 该命令会自动将脚本加入系统计划任务（每天凌晨 4 点执行）。
 
-## 💡 Linux 版增强功能 (Phase 2)
+## 💡 强力安全机制
 
 - **安全测试模式**：支持 `test` 参数进行 Dry Run，在不修改真实 DNS 的情况下验证逻辑。
 - **双栈支持**：同时支持 IPv4 和 IPv6 (AAAA) 记录同步。
-- **模块化 DNS**：支持多种 DNS 提供商（目前已内置 DNSPod）。
 - **环境变量安全**：支持从环境变量 `CF_SECRET_ID` 和 `CF_SECRET_KEY` 读取密钥，无需写入配置文件。
-- **下载镜像支持**：内置 GitHub 镜像加速（如 ghproxy），解决国内下载测速内核慢的问题。
-- **无损更新**：采用“先对比、再更新”策略，仅在 IP 变动时操作，避免 DNS 停机。
 - **自动加锁**：防止多个进程同时运行导致冲突。
-- **智能日志**：支持自动日志轮转，防止占用 R4S 过多空间。
+- **智能日志**：支持自动日志轮转，防止占用过多空间。
 
 ## 🤝 贡献与支持
 
