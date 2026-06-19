@@ -11,6 +11,7 @@ LOCK_FILE="/tmp/cf-speedtest-sync.lock"
 show_help() {
     echo "Usage: $0 [options]"
     echo "Options:"
+    echo "  --source, -s   Specify data source: local (default) or api"
     echo "  run (default)  Run speedtest and sync"
     echo "  test           Run speedtest and dry-run sync (no DNS changes)"
     echo "  speedtest      Only run speedtest"
@@ -36,6 +37,23 @@ manage_cron() {
     esac
 }
 
+# --- 参数解析 ---
+SOURCE=""
+TEMP_ARGS=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --source|-s)
+            SOURCE="$2"
+            shift 2
+            ;;
+        *)
+            TEMP_ARGS="$TEMP_ARGS $1"
+            shift
+            ;;
+    esac
+done
+eval set -- "$TEMP_ARGS"
+
 # --- 执行入口 ---
 case "$1" in
     install)   manage_cron "install"; exit 0 ;;
@@ -56,18 +74,18 @@ trap 'rm -f "$LOCK_FILE" /tmp/cfst_IPv4.csv /tmp/cfst_IPv6.csv; exit' INT TERM E
 
 case "$1" in
     speedtest)
-        sh "$SCRIPT_DIR/speedtest.sh"
+        sh "$SCRIPT_DIR/speedtest.sh" ${SOURCE:+--source "$SOURCE"}
         ;;
     sync)
         sh "$SCRIPT_DIR/sync.sh"
         ;;
     test|--test|--dry-run)
-        sh "$SCRIPT_DIR/speedtest.sh" -q
+        sh "$SCRIPT_DIR/speedtest.sh" -q ${SOURCE:+--source "$SOURCE"}
         sh "$SCRIPT_DIR/sync.sh" test
         ;;
     *)
         # Default run
-        sh "$SCRIPT_DIR/speedtest.sh" -q
+        sh "$SCRIPT_DIR/speedtest.sh" -q ${SOURCE:+--source "$SOURCE"}
         sh "$SCRIPT_DIR/sync.sh"
         ;;
 esac

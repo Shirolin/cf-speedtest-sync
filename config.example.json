@@ -1,11 +1,26 @@
 {
     "DNSProvider": "dnspod",
+    "IPSource": "api",
+    "Api": {
+        "IPv4": "https://ipdb.api.030101.xyz/?type=bestcf",
+        "IPv6": ""
+    },
     "SecretId": "YOUR_SECRET_ID",
     "SecretKey": "YOUR_SECRET_KEY",
     "DownloadMirror": "https://ghproxy.com/",
     "Domain": "example.com",
-    "SubDomain": ["cdn.splatfun", "splatfun", "cdn.raiders", "raiders"],
-    "Lines": ["电信", "联通", "移动", "默认"],
+    "SubDomain": [
+        "cdn.splatfun",
+        "splatfun",
+        "cdn.raiders",
+        "raiders"
+    ],
+    "Lines": [
+        "电信",
+        "联通",
+        "移动",
+        "默认"
+    ],
     "IPv4": {
         "Enable": true,
         "File": "ip.txt",

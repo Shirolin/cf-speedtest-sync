@@ -7,7 +7,9 @@ SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 ROOT_DIR=$(dirname "$SCRIPT_DIR")
 CONFIG_FILE="$ROOT_DIR/config.json"
-LOG_FILE="$ROOT_DIR/sync.log"
+DOMAIN=$(jq -r ".Domain" "$CONFIG_FILE" 2>/dev/null)
+LOG_FILE="$ROOT_DIR/output/$DOMAIN/sync.log"
+mkdir -p "$ROOT_DIR/output/$DOMAIN"
 
 # --- 参数解析 ---
 DRY_RUN="false"
@@ -72,7 +74,7 @@ run_sync() {
     local record_type="A"
     [ "$type" = "IPv6" ] && record_type="AAAA"
     
-    local csv="$ROOT_DIR/report_$type.csv"
+    local csv="$ROOT_DIR/output/$DOMAIN/report_$type.csv"
     if [ ! -f "$csv" ]; then
         # 仅当启用了该类型，且文件不存在时报错
         [ "$(get_config ".$type.Enable")" = "true" ] && log "[WARN] $csv not found. Please run speedtest.sh first."

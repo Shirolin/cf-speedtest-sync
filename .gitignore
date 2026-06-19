@@ -2,8 +2,7 @@
 config.json
 
 # --- 运行时生成的临时数据 ---
-results_speedtest.csv
-SPEEDTEST_REPORT.md
+output/
 core/results.csv
 core/results_speedtest.csv
 
@@ -13,6 +12,4 @@ core/results_speedtest.csv
 .DS_Store
 *.log
 *.tmp
-results_raiders.csv
-RAIDERS_REPORT.md
 core/results_raiders.csv

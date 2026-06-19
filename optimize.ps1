@@ -1,7 +1,8 @@
 # Cloudflare SpeedTest Auto-Pilot (Pure Logic Edition)
 param (
     [switch]$Speedtest, # 仅测速
-    [switch]$SyncDNS    # 仅同步
+    [switch]$SyncDNS,    # 仅同步
+    [string]$Source      # 数据源: local 或 api
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,11 +25,23 @@ function HMAC256 {
 $configPath = "$scriptPath\config.json"
 $config = Get-Content $configPath -Raw -Encoding utf8 | ConvertFrom-Json
 
+# --- 确定数据源 ---
+$finalSource = $config.IPSource
+if ($null -ne $Source -and $Source -ne "") {
+    $finalSource = $Source
+}
+
+# --- 输出目录管控 ---
+$outputDir = "$scriptPath\output\$($config.Domain)"
+if (-not (Test-Path $outputDir)) {
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+}
+
 $targetUrl = $config.IPv4.SpeedTestURL
 $cfst = "core\cfst.exe"
 $ipList = "core\" + $config.IPv4.File
-$outputCsv = "results_speedtest.csv"
-$reportMd = "SPEEDTEST_REPORT.md"
+$outputCsv = "$outputDir\results_speedtest.csv"
+$reportMd = "$outputDir\SPEEDTEST_REPORT.md"
 $syncLogs = New-Object System.Collections.Generic.List[string]
 
 $doSpeedtest = $Speedtest -or ((-not $Speedtest) -and (-not $SyncDNS))
@@ -77,10 +90,32 @@ function Invoke-TencentApi {
 }
 
 function Run-Speedtest {
-    Write-Host ">>> [1/3] Speedtest Running..." -ForegroundColor Cyan
     Remove-Item $outputCsv -ErrorAction SilentlyContinue
-    $args = "-f $ipList -url $targetUrl -httping -n $($config.IPv4.Threads) -dn $($config.IPv4.DownloadCount) -tl $($config.IPv4.LatencyLimit) -o $outputCsv -p 0"
-    Start-Process -FilePath $cfst -ArgumentList $args -Wait -NoNewWindow
+    if ($finalSource -eq "api") {
+        Write-Host ">>> [1/3] Fetching IPs from API ($($config.Api.IPv4))..." -ForegroundColor Cyan
+        try {
+            $resp = (Invoke-WebRequest -Uri $config.Api.IPv4 -UseBasicParsing -TimeoutSec 10).Content
+            $ips = $resp -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$' }
+            if ($null -eq $ips -or $ips.Count -eq 0) {
+                throw "No valid IPs returned from API."
+            }
+            $csvContent = New-Object System.Collections.Generic.List[string]
+            $csvContent.Add("IP,Address,PingTime,LossRate,Latency,Speed,Colo")
+            $speed = 100.0
+            foreach ($ip in $ips) {
+                $csvContent.Add("$ip,$ip,0,0,0,$speed,API")
+                $speed -= 0.1
+            }
+            $csvContent | Out-File -FilePath $outputCsv -Encoding utf8
+            Write-Host ">>> API fetch completed. Saved to $outputCsv" -ForegroundColor Green
+        } catch {
+            throw "Failed to fetch IPs from API: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Host ">>> [1/3] Speedtest Running..." -ForegroundColor Cyan
+        $args = "-f $ipList -url $targetUrl -httping -n $($config.IPv4.Threads) -dn $($config.IPv4.DownloadCount) -tl $($config.IPv4.LatencyLimit) -o `"$outputCsv`" -p 0"
+        Start-Process -FilePath $cfst -ArgumentList $args -Wait -NoNewWindow
+    }
 }
 
 function Run-Sync {
@@ -159,7 +194,7 @@ function Run-Report {
     $top5 = $all | Sort-Object @{Expression="Speed"; Descending=$true}, @{Expression="Latency"; Ascending=$true} | Select-Object -First 5
     $report = "# Cloudflare Optimization Report`n> Generated: $(Get-Date)`n`n## Top 5 Optimized IPs`n| Rank | IP | Latency | Speed | Region |`n| :--- | :--- | :--- | :--- | :--- |`n"
     $idx=1; foreach($r in $top5){ $report += "| $idx | **$($r.IP)** | $($r.Latency) | $($r.Speed) | $($r.Colo) |`n"; $idx++ }
-    if ($syncLogs.Count -gt 0) { $report += "`n## Sync Log`n" + "````n" + ($syncLogs -join "`n") + "`n````n" }
+    if ($syncLogs.Count -gt 0) { $report += "`n## Sync Log`n" + "``````n" + ($syncLogs -join "`n") + "`n``````n" }
     $report | Out-File $reportMd -Encoding utf8
     $top5 | Format-Table -AutoSize
 }
