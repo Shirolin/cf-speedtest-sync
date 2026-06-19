@@ -89,6 +89,28 @@ function Invoke-TencentApi {
     return $Result.Response
 }
 
+function Get-SaasIps {
+    $domains = @("cname.pages.dev", "anycast.cloudflare.com", "discord.com", "zoom.us", "cloudflare.com")
+    $ips = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($d in $domains) {
+        try {
+            $addresses = [System.Net.Dns]::GetHostAddresses($d)
+            foreach ($addr in $addresses) {
+                if ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+                    $ipStr = $addr.IPAddressToString
+                    if ($ipStr -match '^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$') {
+                        $prefix = $Matches[1]
+                        for ($i = 1; $i -le 254; $i++) {
+                            $ips.Add("$prefix.$i") | Out-Null
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+    return $ips
+}
+
 function Run-Speedtest {
     Remove-Item $outputCsv -ErrorAction SilentlyContinue
     if ($finalSource -eq "api") {
@@ -112,9 +134,28 @@ function Run-Speedtest {
             throw "Failed to fetch IPs from API: $($_.Exception.Message)"
         }
     } else {
-        Write-Host ">>> [1/3] Speedtest Running..." -ForegroundColor Cyan
-        $args = "-f $ipList -url $targetUrl -httping -n $($config.IPv4.Threads) -dn $($config.IPv4.DownloadCount) -tl $($config.IPv4.LatencyLimit) -o `"$outputCsv`" -p 0"
+        $testIpList = $ipList
+        if ($finalSource -eq "saas") {
+            Write-Host ">>> [1/3] Gathering SaaS domains IP ranges..." -ForegroundColor Cyan
+            $saasIps = Get-SaasIps
+            if ($saasIps.Count -gt 0) {
+                $tempIpFile = "$outputDir\saas_ips.txt"
+                [System.IO.File]::WriteAllLines($tempIpFile, $saasIps)
+                $testIpList = $tempIpFile
+                Write-Host ">>> Gathered $($saasIps.Count) IPs from SaaS domains. Running speedtest..." -ForegroundColor Green
+            } else {
+                Write-Warning "Failed to resolve SaaS domains. Falling back to default IP list."
+            }
+        } else {
+            Write-Host ">>> [1/3] Speedtest Running..." -ForegroundColor Cyan
+        }
+
+        $args = "-f `"$testIpList`" -url $targetUrl -httping -n $($config.IPv4.Threads) -dn $($config.IPv4.DownloadCount) -tl $($config.IPv4.LatencyLimit) -o `"$outputCsv`" -p 0"
         Start-Process -FilePath $cfst -ArgumentList $args -Wait -NoNewWindow
+
+        if ($finalSource -eq "saas" -and (Test-Path "$outputDir\saas_ips.txt")) {
+            Remove-Item "$outputDir\saas_ips.txt" -ErrorAction SilentlyContinue
+        }
     }
 }
 

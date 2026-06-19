@@ -67,6 +67,35 @@ setup_cfst() {
     rm -f "/tmp/$PKG"
 }
 
+# --- 获取大厂 SaaS 优质 IP 网段 ---
+get_saas_ips() {
+    local domains="cname.pages.dev anycast.cloudflare.com discord.com zoom.us cloudflare.com"
+    local temp_file="$OUTPUT_DIR/saas_ips.txt"
+    rm -f "$temp_file"
+    
+    for d in $domains; do
+        local ips=""
+        if command -v dig >/dev/null 2>&1; then
+            ips=$(dig +short A "$d" | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+        elif command -v nslookup >/dev/null 2>&1; then
+            ips=$(nslookup -query=A "$d" 2>/dev/null | awk '/^Address: / { print $2 }' | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+        elif command -v getent >/dev/null 2>&1; then
+            ips=$(getent ahosts "$d" | awk '{print $1}' | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$')
+        fi
+        
+        for ip in $ips; do
+            local prefix=$(echo "$ip" | cut -d. -f1-3)
+            for i in $(seq 1 254); do
+                echo "$prefix.$i" >> "$temp_file"
+            done
+        done
+    done
+    
+    if [ -f "$temp_file" ]; then
+        sort -u "$temp_file" -o "$temp_file"
+    fi
+}
+
 # --- 执行测速 / API 获取 ---
 run_type_speedtest() {
     local type=$1
@@ -109,9 +138,28 @@ run_type_speedtest() {
     fi
 
     # 本地测速模式
-    [ "$QUIET" = "false" ] && echo ">>> Running Speedtest for $type..."
     local ip_file="$CORE_DIR/$(get_config "$config_key.File")"
     [ ! -f "$ip_file" ] && ip_file="$ROOT_DIR/core/$(get_config "$config_key.File")"
+    
+    if [ "$FINAL_SOURCE" = "saas" ]; then
+        if [ "$type" = "IPv6" ]; then
+            [ "$QUIET" = "false" ] && echo ">>> SaaS source selected. Skipping IPv6."
+            return 0
+        fi
+        [ "$QUIET" = "false" ] && echo ">>> [1/3] Gathering SaaS domains IP ranges..."
+        get_saas_ips
+        local temp_file="$OUTPUT_DIR/saas_ips.txt"
+        if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+            ip_file="$temp_file"
+            local count=$(wc -l < "$temp_file")
+            [ "$QUIET" = "false" ] && echo ">>> Gathered $count IPs from SaaS domains. Running speedtest..."
+        else
+            echo "[WARN] Failed to resolve SaaS domains. Falling back to default IP list."
+        fi
+    else
+        [ "$QUIET" = "false" ] && echo ">>> Running Speedtest for $type..."
+    fi
+    
     [ ! -f "$ip_file" ] && echo "[WARN] $ip_file missing, skip $type" && return 1
 
     local flags="-f $ip_file -url $(get_config "$config_key.SpeedTestURL") -httping -n $(get_config "$config_key.Threads") -dn $(get_config "$config_key.DownloadCount") -tl $(get_config "$config_key.LatencyLimit") -o $output_csv -p 0"
@@ -121,6 +169,10 @@ run_type_speedtest() {
         "$CFST_BIN" $flags > /dev/null 2>&1
     else
         "$CFST_BIN" $flags
+    fi
+    
+    if [ "$FINAL_SOURCE" = "saas" ] && [ -f "$OUTPUT_DIR/saas_ips.txt" ]; then
+        rm -f "$OUTPUT_DIR/saas_ips.txt"
     fi
 }
 
