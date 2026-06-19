@@ -75,10 +75,15 @@ sh linux/optimize.sh install
 - **自动加锁**：防止多个进程同时运行导致冲突。
 - **智能日志**：支持自动日志轮转，防止占用过多空间。
 
-## 🤝 贡献与支持
+## 🤝 鸣谢与声明
 
-如果你有任何建议或发现了 Bug，欢迎提交 Issue。后续计划增加更多 DNS 提供商支持，欢迎提交 Pull Request！
+本项目的本地测速模块依赖并集成了优秀的开源项目 [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)（简称 `cfst`）。在此向原作者 [XIU2](https://github.com/XIU2) 表达诚挚的感谢！
+
+- **测速内核 (cfst)**：基于 [GPL-3.0 License](https://github.com/XIU2/CloudflareSpeedTest/blob/master/LICENSE) 协议发布。
+- **本同步脚本 (Wrapper)**：采用 [MIT License](LICENSE) 协议发布。由于本脚本是通过独立进程调用方式使用 `cfst` 二进制内核，不涉及对 GPL 源码的修改与静态链接编译，故本脚本符合 MIT 与 GPL-3.0 的开源合规性。
+
+如果您有任何建议或发现了 Bug，欢迎提交 Issue。后续计划增加更多 DNS 提供商支持，欢迎提交 Pull Request！
 
 ## 📄 开源协议
 
-基于 [MIT License](LICENSE) 协议。
+本项目脚本部分基于 [MIT License](LICENSE) 协议。核心测速内核遵循原项目的 [GPL-3.0 License](https://github.com/XIU2/CloudflareSpeedTest/blob/master/LICENSE) 协议。
