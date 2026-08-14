@@ -3,7 +3,7 @@
 全平台 Cloudflare 优选 IP 自动同步工具。自动寻找 Cloudflare 最快 IP 并实时更新您的域名解析记录。
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20iStoreOS-blue)](https://github.com/your-username/cf-speedtest-sync)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20iStoreOS-blue)](https://github.com/Shirolin/cf-speedtest-sync)
 
 ## 🚀 核心功能
 
