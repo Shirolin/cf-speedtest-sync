@@ -10,6 +10,9 @@ CONFIG_FILE="$ROOT_DIR/config.json"
 CORE_DIR="$ROOT_DIR/core"
 CFST_BIN="$CORE_DIR/cfst"
 
+# --- 引入公共日志模块 (ROOT_DIR / CONFIG_FILE / LOG_FILE / log) ---
+. "$SCRIPT_DIR/common.sh"
+
 # --- 参数解析 ---
 QUIET="false"
 SOURCE=""
@@ -30,8 +33,8 @@ while [ $# -gt 0 ]; do
 done
 
 # --- 依赖与配置检查 ---
-if ! command -v jq >/dev/null 2>&1; then echo "[ERROR] jq not found."; exit 1; fi
-if [ ! -f "$CONFIG_FILE" ]; then echo "[ERROR] config.json missing"; exit 1; fi
+if ! command -v jq >/dev/null 2>&1; then log "[ERROR] jq not found. Please install it (opkg install jq)."; exit 1; fi
+if [ ! -f "$CONFIG_FILE" ]; then log "[ERROR] config.json missing at $CONFIG_FILE"; exit 1; fi
 
 get_config() { jq -r "$1" "$CONFIG_FILE" 2>/dev/null; }
 
@@ -58,11 +61,18 @@ setup_cfst() {
     esac
     local mirror=$(get_config ".DownloadMirror")
     [ "$mirror" = "null" ] && mirror=""
-    [ "$QUIET" = "false" ] && echo ">>> Downloading CloudflareST..."
     local url="${mirror}https://github.com/XIU2/CloudflareSpeedTest/releases/latest/download/$PKG"
-    curl -sL -o "/tmp/$PKG" "$url" || exit 1
+    log ">>> Downloading CloudflareST for $ARCH..."
+    if ! curl -sL -o "/tmp/$PKG" "$url"; then
+        log "[ERROR] Failed to download cfst: $url"
+        exit 1
+    fi
     mkdir -p "$CORE_DIR"
-    tar -zxf "/tmp/$PKG" -C "$CORE_DIR" cfst
+    if ! tar -zxf "/tmp/$PKG" -C "$CORE_DIR" cfst; then
+        log "[ERROR] Failed to extract cfst from /tmp/$PKG"
+        rm -f "/tmp/$PKG"
+        exit 1
+    fi
     chmod +x "$CFST_BIN"
     rm -f "/tmp/$PKG"
 }
@@ -100,67 +110,76 @@ get_saas_ips() {
 run_type_speedtest() {
     local type=$1
     local config_key=".$type"
-    [ "$(get_config "$config_key.Enable")" != "true" ] && return 1
+
+    # 未启用的协议不算失败，直接跳过
+    if [ "$(get_config "$config_key.Enable")" != "true" ]; then
+        log ">>> $type disabled in config.json. Skipping."
+        return 0
+    fi
 
     local output_csv="$OUTPUT_DIR/report_$type.csv"
     rm -f "$output_csv"
 
     if [ "$FINAL_SOURCE" = "api" ]; then
         if [ "$type" = "IPv6" ]; then
-            [ "$QUIET" = "false" ] && echo ">>> API source selected. Skipping IPv6."
+            log ">>> API source does not support $type. Skipping."
             return 0
         fi
 
         local api_url=$(get_config ".Api.IPv4")
-        [ "$QUIET" = "false" ] && echo ">>> Fetching IPs from API ($api_url)..."
-        
+        log ">>> Fetching IPs from API ($api_url)..."
+
         local resp=$(curl -s --max-time 10 "$api_url")
         if [ -z "$resp" ]; then
-            echo "[ERROR] API returned empty response or timed out."
-            exit 1
+            log "[ERROR] API returned empty response or timed out: $api_url"
+            return 1
         fi
-        
+
         echo "IP,Address,PingTime,LossRate,Latency,Speed,Colo" > "$output_csv"
         for ip in $resp; do
             if echo "$ip" | grep -Eq '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
                 echo "$ip,$ip,0,0,0,100,API" >> "$output_csv"
             fi
         done
-        
+
         local count=$(wc -l < "$output_csv")
         count=$((count - 1))
         if [ "$count" -le 0 ]; then
-            echo "[ERROR] No valid IPv4 addresses found in API response."
-            exit 1
+            log "[ERROR] No valid IPv4 addresses found in API response from $api_url"
+            rm -f "$output_csv"
+            return 1
         fi
-        [ "$QUIET" = "false" ] && echo ">>> API fetch completed. Saved $count IPs to $output_csv"
+        log ">>> API fetch completed. Saved $count IPs to $output_csv"
         return 0
     fi
 
     # 本地测速模式
     local ip_file="$CORE_DIR/$(get_config "$config_key.File")"
     [ ! -f "$ip_file" ] && ip_file="$ROOT_DIR/core/$(get_config "$config_key.File")"
-    
+
     if [ "$FINAL_SOURCE" = "saas" ]; then
         if [ "$type" = "IPv6" ]; then
-            [ "$QUIET" = "false" ] && echo ">>> SaaS source selected. Skipping IPv6."
+            log ">>> SaaS source does not support $type. Skipping."
             return 0
         fi
-        [ "$QUIET" = "false" ] && echo ">>> [1/3] Gathering SaaS domains IP ranges..."
+        log ">>> [1/3] Gathering SaaS domains IP ranges..."
         get_saas_ips
         local temp_file="$OUTPUT_DIR/saas_ips.txt"
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
             ip_file="$temp_file"
             local count=$(wc -l < "$temp_file")
-            [ "$QUIET" = "false" ] && echo ">>> Gathered $count IPs from SaaS domains. Running speedtest..."
+            log ">>> Gathered $count IPs from SaaS domains. Running speedtest..."
         else
-            echo "[WARN] Failed to resolve SaaS domains. Falling back to default IP list."
+            log "[WARN] Failed to resolve SaaS domains. Falling back to default IP list."
         fi
     else
-        [ "$QUIET" = "false" ] && echo ">>> Running Speedtest for $type..."
+        log ">>> Running Speedtest for $type..."
     fi
-    
-    [ ! -f "$ip_file" ] && echo "[WARN] $ip_file missing, skip $type" && return 1
+
+    if [ ! -f "$ip_file" ]; then
+        log "[ERROR] IP list $ip_file missing. Cannot run speedtest for $type."
+        return 1
+    fi
 
     local flags="-f $ip_file -url $(get_config "$config_key.SpeedTestURL") -httping -n $(get_config "$config_key.Threads") -dn $(get_config "$config_key.DownloadCount") -tl $(get_config "$config_key.LatencyLimit") -o $output_csv -p 0"
     [ "$type" = "IPv6" ] && flags="$flags -ipv6"
@@ -170,14 +189,32 @@ run_type_speedtest() {
     else
         "$CFST_BIN" $flags
     fi
-    
+    CFST_STATUS=$?
+
     if [ "$FINAL_SOURCE" = "saas" ] && [ -f "$OUTPUT_DIR/saas_ips.txt" ]; then
         rm -f "$OUTPUT_DIR/saas_ips.txt"
     fi
+
+    if [ "$CFST_STATUS" -ne 0 ]; then
+        log "[ERROR] cfst exited with code $CFST_STATUS for $type."
+        return 1
+    fi
+    if [ ! -s "$output_csv" ]; then
+        log "[ERROR] cfst produced no result file for $type: $output_csv"
+        return 1
+    fi
+    return 0
 }
 
 setup_cfst
-run_type_speedtest "IPv4"
-run_type_speedtest "IPv6"
-[ "$QUIET" = "false" ] && echo ">>> Speedtest finished. Reports saved to output directory."
+
+STATUS=0
+run_type_speedtest "IPv4" || STATUS=1
+run_type_speedtest "IPv6" || STATUS=1
+
+if [ "$STATUS" -ne 0 ]; then
+    log "[ERROR] Speedtest finished with errors. Reports may be incomplete."
+    exit 1
+fi
+log ">>> Speedtest finished. Reports saved to output directory."
 exit 0

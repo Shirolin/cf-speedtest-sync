@@ -6,30 +6,19 @@
 SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 ROOT_DIR=$(dirname "$SCRIPT_DIR")
-CONFIG_FILE="$ROOT_DIR/config.json"
-DOMAIN=$(jq -r ".Domain" "$CONFIG_FILE" 2>/dev/null)
-LOG_FILE="$ROOT_DIR/output/$DOMAIN/sync.log"
-mkdir -p "$ROOT_DIR/output/$DOMAIN"
 
-# --- 参数解析 ---
+# --- 参数解析（须在引入 common.sh 之前：log 依赖 DRY_RUN 决定是否加 [DRY-RUN] 前缀）---
 DRY_RUN="false"
 if [ "$1" = "test" ] || [ "$1" = "--test" ] || [ "$1" = "--dry-run" ]; then
     DRY_RUN="true"
 fi
 
-# --- 依赖与配置检查 ---
-if ! command -v jq >/dev/null 2>&1; then echo "[ERROR] jq not found."; exit 1; fi
-if [ ! -f "$CONFIG_FILE" ]; then echo "[ERROR] config.json missing"; exit 1; fi
+# --- 引入公共日志模块 (ROOT_DIR / CONFIG_FILE / LOG_FILE / log) ---
+. "$SCRIPT_DIR/common.sh"
 
-log() {
-    [ "$DRY_RUN" = "true" ] && printf "[DRY-RUN] " >&2
-    if [ -f "$LOG_FILE" ] && [ $(wc -c < "$LOG_FILE") -gt 1048576 ]; then
-        local tmp_log=$(tail -n 1000 "$LOG_FILE")
-        echo "$tmp_log" > "$LOG_FILE"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Log rotated" >> "$LOG_FILE"
-    fi
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE" >&2
-}
+# --- 依赖与配置检查 ---
+if ! command -v jq >/dev/null 2>&1; then log "[ERROR] jq not found. Please install it (opkg install jq)."; exit 1; fi
+if [ ! -f "$CONFIG_FILE" ]; then log "[ERROR] config.json missing at $CONFIG_FILE"; exit 1; fi
 
 get_config() {
     local key=$1
@@ -40,6 +29,8 @@ get_config() {
     esac
     if [ -n "$env_val" ]; then echo "$env_val"; else jq -r "$key" "$CONFIG_FILE" 2>/dev/null; fi
 }
+
+DOMAIN=$(get_config ".Domain")
 
 # --- DNS 引擎 (DNSPod) ---
 dnspod_api() {
@@ -76,10 +67,15 @@ run_sync() {
     
     local csv="$ROOT_DIR/output/$DOMAIN/report_$type.csv"
     if [ ! -f "$csv" ]; then
-        # 仅当启用了该类型，且文件不存在时报错
-        [ "$(get_config ".$type.Enable")" = "true" ] && log "[WARN] $csv not found. Please run speedtest.sh first."
+        # 未启用的类型无需同步；启用了却拿不到结果文件 = 测速环节失败
+        if [ "$(get_config ".$type.Enable")" = "true" ]; then
+            log "[ERROR] $csv not found. Speedtest step produced no result for $type."
+            return 1
+        fi
         return 0
     fi
+
+    local failed=0
     
     local best_ips=$(tail -n +2 "$csv" | awk -F, '{print $1}' | head -n $(get_config ".$type.DownloadCount"))
     
@@ -105,11 +101,16 @@ run_sync() {
     for sub in $subdomains; do
         log ">>> Processing: $sub ($record_type)"
         local resp=$(dns_dispatch "DescribeRecordList" "{\"Domain\":\"$domain\",\"Subdomain\":\"$sub\"}")
-        [ -z "$resp" ] && continue
-        
+        if [ -z "$resp" ]; then
+            log "[ERROR] Empty response from DNS API while listing $sub."
+            failed=1
+            continue
+        fi
+
         # 严格校验 API 返回是否包含 Error
         if echo "$resp" | jq -e '.Response.Error' > /dev/null 2>&1; then
             log "[ERROR] API returned error for $sub. Skipping to prevent DNS corruption."
+            failed=1
             continue
         fi
 
@@ -117,6 +118,7 @@ run_sync() {
         local records=$(echo "$resp" | jq -e -c ".Response.RecordList // [] | map(select(.Type == \"$record_type\"))" 2>/dev/null)
         if [ $? -ne 0 ]; then
             log "[ERROR] Failed to parse RecordList for $sub. Skipping."
+            failed=1
             continue
         fi
 
@@ -138,7 +140,10 @@ run_sync() {
                     matches="$matches ${r_line}_${r_value}"
                 else
                     log "[-] ($sub) Deleting ($r_line): $r_value"
-                    [ "$DRY_RUN" != "true" ] && dns_dispatch "DeleteRecord" "{\"Domain\":\"$domain\",\"RecordId\":$r_id}" > /dev/null
+                    if [ "$DRY_RUN" != "true" ]; then
+                        local del_resp=$(dns_dispatch "DeleteRecord" "{\"Domain\":\"$domain\",\"RecordId\":$r_id}")
+                        echo "$del_resp" | jq -e '.Response.Error' > /dev/null 2>&1 && failed=1
+                    fi
                     sleep 1
                 fi
             fi
@@ -146,16 +151,32 @@ run_sync() {
 
         for line in $lines; do
             for ip in $best_ips; do
-                [ -z "$(echo "$matches" | grep "${line}_${ip}")" ] && \
-                log "[+] ($sub) Adding ($line): $ip" && \
-                { [ "$DRY_RUN" = "true" ] || dns_dispatch "CreateRecord" "{\"Domain\":\"$domain\",\"SubDomain\":\"$sub\",\"RecordType\":\"$record_type\",\"RecordLine\":\"$line\",\"Value\":\"$ip\"}" > /dev/null; } && \
-                sleep 1
+                if [ -z "$(echo "$matches" | grep "${line}_${ip}")" ]; then
+                    log "[+] ($sub) Adding ($line): $ip"
+                    if [ "$DRY_RUN" != "true" ]; then
+                        local add_resp=$(dns_dispatch "CreateRecord" "{\"Domain\":\"$domain\",\"SubDomain\":\"$sub\",\"RecordType\":\"$record_type\",\"RecordLine\":\"$line\",\"Value\":\"$ip\"}")
+                        echo "$add_resp" | jq -e '.Response.Error' > /dev/null 2>&1 && failed=1
+                    fi
+                    sleep 1
+                fi
             done
         done
     done
+
+    if [ "$failed" -ne 0 ]; then
+        log "[ERROR] $type sync finished with API errors."
+        return 1
+    fi
+    return 0
 }
 
-run_sync "IPv4"
-run_sync "IPv6"
+SYNC_FAILED=0
+run_sync "IPv4" || SYNC_FAILED=1
+run_sync "IPv6" || SYNC_FAILED=1
+
+if [ "$SYNC_FAILED" -ne 0 ]; then
+    log "[ERROR] Sync finished with errors. DNS records may be missing or stale."
+    exit 1
+fi
 log ">>> Sync completed."
 exit 0
