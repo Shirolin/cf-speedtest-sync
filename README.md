@@ -55,7 +55,7 @@
    | `DNSProvider` | `"dnspod"` | DNS 解析提供商。当前支持 `"dnspod"` (腾讯云)。 |
    | `IPSource` | `"local"` | 优选 IP 来源。`"local"` 本机测速 / `"api"` 第三方优选 API / `"saas"` 大厂影子网段优选。 |
    | `Api.IPv4` | `"https://ipdb.api.030101.xyz/?type=bestcf"` | 第三方优选 IPv4 接口地址（仅在 `IPSource` 设为 `"api"` 时生效）。 |
-   | `Api.IPv4Fallback` | 内置 GitHub 镜像 | 主接口重试仍失败时启用的兜底源数组，按顺序尝试。默认内置 [ymyuuu/IPDB](https://github.com/ymyuuu/IPDB) 的 `BestCF/bestcfv4.txt`（与主接口同源、但走 GitHub 独立基建，主接口故障时仍在每小时更新）；显式设为 `[]` 可关闭兜底。 |
+   | `Api.IPv4Fallback` | 内置 GitHub 镜像 | 主接口重试仍失败时启用的兜底源数组，按顺序尝试。默认内置 [ymyuuu/IPDB](https://github.com/ymyuuu/IPDB) 的 `BestCF/bestcfv4.txt`（与主接口同源、但走 GitHub 独立基建，实测主接口返回 400 的 15 天里它仍在每小时更新）；显式设为 `[]` 可关闭兜底。注意兜底与主接口**同源**：若上游整体停摆，镜像只会停在旧列表，最坏结果是"IP 与现网相同"（同步判定为无变动，不改动 DNS）。 |
    | `Api.Retries` | `3` | 主接口失败时的重试次数（退避 5s / 10s），仅覆盖单次抖动。 |
    | `SecretId` | `"YOUR_SECRET_ID"` | 腾讯云 API 密钥 SecretId。改用下方的密钥文件时可留空。 |
    | `SecretKey` | `"YOUR_SECRET_KEY"` | 腾讯云 API 密钥 SecretKey。改用下方的密钥文件时可留空。 |
