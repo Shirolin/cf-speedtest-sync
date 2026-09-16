@@ -12,6 +12,15 @@ if [ -z "$SCRIPT_DIR" ]; then
     exit 1
 fi
 
+# --- 可选密钥文件 ---
+# 用于把 CF_SECRET_ID / CF_SECRET_KEY 放在项目目录之外（建议 chmod 600），
+# 使 config.json 可安全备份/分发。文件不存在时静默跳过，行为与从前一致。
+# 可用 CFSYNC_ENV_FILE 覆盖路径。
+CFSYNC_ENV_FILE="${CFSYNC_ENV_FILE:-/etc/cf-speedtest.env}"
+if [ -f "$CFSYNC_ENV_FILE" ]; then
+    . "$CFSYNC_ENV_FILE"
+fi
+
 if [ -z "$ROOT_DIR" ]; then
     ROOT_DIR=$(dirname "$SCRIPT_DIR")
 fi

@@ -55,8 +55,8 @@
    | `DNSProvider` | `"dnspod"` | DNS 解析提供商。当前支持 `"dnspod"` (腾讯云)。 |
    | `IPSource` | `"local"` | 优选 IP 来源。`"local"` 本机测速 / `"api"` 第三方优选 API / `"saas"` 大厂影子网段优选。 |
    | `Api.IPv4` | `"https://ipdb.api.030101.xyz/?type=bestcf"` | 第三方优选 IPv4 接口地址（仅在 `IPSource` 设为 `"api"` 时生效）。 |
-   | `SecretId` | `"YOUR_SECRET_ID"` | 腾讯云 API 密钥 SecretId。 |
-   | `SecretKey` | `"YOUR_SECRET_KEY"` | 腾讯云 API 密钥 SecretKey。 |
+   | `SecretId` | `"YOUR_SECRET_ID"` | 腾讯云 API 密钥 SecretId。改用下方的密钥文件时可留空。 |
+   | `SecretKey` | `"YOUR_SECRET_KEY"` | 腾讯云 API 密钥 SecretKey。改用下方的密钥文件时可留空。 |
    | `Domain` | `"example.com"` | 托管的主域名。 |
    | `SubDomain` | `["cdn"]` | 待优选绑定的子域名数组（支持多个）。 |
    | `Lines` | `["电信", "联通", "移动"]` | 托管解析的运营商线路。如用 CNAME 回源 SaaS，推荐仅托管 `["境内"]`，并保持 `默认` 线路为 CNAME。 |
@@ -90,7 +90,7 @@ sh linux/optimize.sh install
 
 - **安全测试模式**：支持 `test` 参数进行 Dry Run，在不修改真实 DNS 的情况下验证逻辑。
 - **双栈支持**：同时支持 IPv4 和 IPv6 (AAAA) 记录同步。
-- **环境变量安全**：支持从环境变量 `CF_SECRET_ID` 和 `CF_SECRET_KEY` 读取密钥，无需写入配置文件。
+- **环境变量安全**：`CF_SECRET_ID` / `CF_SECRET_KEY` 优先于配置文件。三个脚本启动时会自动加载 `${CFSYNC_ENV_FILE:-/etc/cf-speedtest.env}`（若存在），推荐把密钥写进该文件并 `chmod 600`、`config.json` 中留空，这样配置文件可以随意备份或分发。
 - **自动加锁**：防止多个进程同时运行导致冲突；锁冲突与残留锁都会写进日志，不再静默跳过。
 - **智能日志**：`optimize.sh` / `speedtest.sh` / `sync.sh` 共用 `linux/common.sh` 里的统一日志函数，所有环节的输出与失败原因都落到 `output/<你的域名>/sync.log`，并自动轮转防止占用过多空间。
 - **失败可观测**：任一环节出错都会返回非零退出码并写明原因；`>>> Sync completed.` 仅在真正同步成功时输出，空跑/失败会记 `[ERROR]` 而不会谎报成功。

@@ -1,0 +1,6 @@
+# 本项目在 Windows 编辑、在 Linux / iStoreOS 上运行。
+# 强制这些文件以 LF 入库并按 LF 检出，避免 autocrlf 把 CRLF 带进 shell 脚本导致
+# 路由器上 `sh: not found` / `\r` 之类的问题。
+*.sh   text eol=lf
+*.py   text eol=lf
+*.json text eol=lf
