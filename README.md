@@ -41,7 +41,7 @@
 
 1. **克隆项目**
    ```bash
-   git clone https://github.com/your-username/cf-speedtest-sync.git
+   git clone https://github.com/Shirolin/cf-speedtest-sync.git
    cd cf-speedtest-sync
    ```
 
