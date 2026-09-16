@@ -10,6 +10,14 @@ CONFIG_FILE="$ROOT_DIR/config.json"
 CORE_DIR="$ROOT_DIR/core"
 CFST_BIN="$CORE_DIR/cfst"
 
+# --- 兜底数据源 ---
+# 与主接口同源（ymyuuu/IPDB 优选结果），但走 GitHub 独立基建：
+# 主接口返回 400/宕机时该文件仍在每小时更新，可作为降级数据源。
+# 可用 config.json 的 Api.IPv4Fallback 覆盖；显式设为 [] 表示关闭兜底。
+DEFAULT_FALLBACK_URL="https://raw.githubusercontent.com/ymyuuu/IPDB/main/BestCF/bestcfv4.txt"
+# 降级标记：主源全败但兜底成功时为 1，最终退出码 2（数据可用但已降级）
+API_DEGRADED=0
+
 # --- 引入公共日志模块 (ROOT_DIR / CONFIG_FILE / LOG_FILE / log) ---
 . "$SCRIPT_DIR/common.sh"
 
@@ -106,6 +114,30 @@ get_saas_ips() {
     fi
 }
 
+# --- 从单一数据源抓取 IPv4 列表 ---
+# 成功：把合法 IPv4 逐行写到 stdout 并返回 0；失败：写日志并返回 1。
+# 失败时记录 HTTP 状态码与响应开头，避免"接口返回 400 + HTML 帮助页"被误判成网络问题。
+fetch_ipv4_from() {
+    local url="$1"
+    local body="/tmp/cfsync_fetch.$$"
+    local code head_txt
+
+    code=$(curl -s -m 10 -o "$body" -w '%{http_code}' "$url" 2>/dev/null)
+    [ -z "$code" ] && code="000"   # curl 自身失败（DNS/连接/超时）拿不到状态码
+
+    if grep -Eq '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' "$body" 2>/dev/null; then
+        grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' "$body"
+        rm -f "$body"
+        return 0
+    fi
+
+    head_txt=$(head -c 120 "$body" 2>/dev/null | tr '\n\r\t' '   ')
+    rm -f "$body"
+    log "[WARN] Source unusable (HTTP $code, no valid IPv4): $url"
+    [ -n "$head_txt" ] && log "[WARN] Response head: $head_txt"
+    return 1
+}
+
 # --- 执行测速 / API 获取 ---
 run_type_speedtest() {
     local type=$1
@@ -127,28 +159,57 @@ run_type_speedtest() {
         fi
 
         local api_url=$(get_config ".Api.IPv4")
-        log ">>> Fetching IPs from API ($api_url)..."
+        if [ -z "$api_url" ] || [ "$api_url" = "null" ]; then
+            log "[ERROR] Api.IPv4 is empty in config.json."
+            return 1
+        fi
 
-        local resp=$(curl -s --max-time 10 "$api_url")
-        if [ -z "$resp" ]; then
-            log "[ERROR] API returned empty response or timed out: $api_url"
+        local retries=$(get_config ".Api.Retries")
+        case "$retries" in ''|*[!0-9]*) retries=3 ;; esac
+        [ "$retries" -lt 1 ] && retries=1
+
+        # 主源：重试若干次，覆盖单次抖动（持续多天的接口故障由兜底源处理）
+        local ips="" attempt=1 delay=5
+        while [ "$attempt" -le "$retries" ]; do
+            log ">>> Fetching IPs from API ($api_url) [attempt $attempt/$retries]..."
+            ips=$(fetch_ipv4_from "$api_url")
+            [ -n "$ips" ] && break
+            if [ "$attempt" -lt "$retries" ]; then
+                log "[WARN] API attempt $attempt/$retries failed; retrying in ${delay}s..."
+                sleep "$delay"
+                delay=$((delay * 2))
+            fi
+            attempt=$((attempt + 1))
+        done
+
+        # 兜底源：主源全败时按顺序尝试（默认内置 GitHub 镜像，可用 [] 关闭）
+        if [ -z "$ips" ]; then
+            local fallbacks=$(get_config '.Api.IPv4Fallback[]?')
+            if [ "$(get_config '.Api.IPv4Fallback | type')" != "array" ]; then
+                fallbacks="$DEFAULT_FALLBACK_URL"
+            fi
+            for url in $fallbacks; do
+                log "[WARN] Primary API failed after $retries attempt(s). Trying fallback source: $url"
+                ips=$(fetch_ipv4_from "$url")
+                if [ -n "$ips" ]; then
+                    API_DEGRADED=1
+                    break
+                fi
+            done
+        fi
+
+        if [ -z "$ips" ]; then
+            log "[ERROR] All sources failed; no valid IPv4 obtained. DNS left untouched."
+            rm -f "$output_csv"
             return 1
         fi
 
         echo "IP,Address,PingTime,LossRate,Latency,Speed,Colo" > "$output_csv"
-        for ip in $resp; do
-            if echo "$ip" | grep -Eq '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'; then
-                echo "$ip,$ip,0,0,0,100,API" >> "$output_csv"
-            fi
+        local count=0
+        for ip in $ips; do
+            echo "$ip,$ip,0,0,0,100,API" >> "$output_csv"
+            count=$((count + 1))
         done
-
-        local count=$(wc -l < "$output_csv")
-        count=$((count - 1))
-        if [ "$count" -le 0 ]; then
-            log "[ERROR] No valid IPv4 addresses found in API response from $api_url"
-            rm -f "$output_csv"
-            return 1
-        fi
         log ">>> API fetch completed. Saved $count IPs to $output_csv"
         return 0
     fi
@@ -215,6 +276,10 @@ run_type_speedtest "IPv6" || STATUS=1
 if [ "$STATUS" -ne 0 ]; then
     log "[ERROR] Speedtest finished with errors. Reports may be incomplete."
     exit 1
+fi
+if [ "$API_DEGRADED" -ne 0 ]; then
+    log "[WARN] Degraded run: primary API failed, data came from the fallback source."
+    exit 2
 fi
 log ">>> Speedtest finished. Reports saved to output directory."
 exit 0

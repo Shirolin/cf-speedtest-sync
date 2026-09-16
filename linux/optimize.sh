@@ -82,6 +82,7 @@ trap 'cleanup' EXIT
 log ">>> Run started (mode=${1:-run}, source=${SOURCE:-config.json})"
 
 STATUS=0
+DEGRADED=0
 case "$1" in
     speedtest)
         sh "$SCRIPT_DIR/speedtest.sh" ${SOURCE:+--source "$SOURCE"} || STATUS=$?
@@ -91,7 +92,8 @@ case "$1" in
         ;;
     test|--test|--dry-run)
         sh "$SCRIPT_DIR/speedtest.sh" -q ${SOURCE:+--source "$SOURCE"} || STATUS=$?
-        if [ "$STATUS" -eq 0 ]; then
+        if [ "$STATUS" -eq 0 ] || [ "$STATUS" -eq 2 ]; then
+            [ "$STATUS" -eq 2 ] && DEGRADED=1
             sh "$SCRIPT_DIR/sync.sh" test || STATUS=$?
         else
             log "[ERROR] Speedtest step failed (exit $STATUS). Sync aborted to protect DNS."
@@ -100,7 +102,8 @@ case "$1" in
     *)
         # Default run
         sh "$SCRIPT_DIR/speedtest.sh" -q ${SOURCE:+--source "$SOURCE"} || STATUS=$?
-        if [ "$STATUS" -eq 0 ]; then
+        if [ "$STATUS" -eq 0 ] || [ "$STATUS" -eq 2 ]; then
+            [ "$STATUS" -eq 2 ] && DEGRADED=1
             sh "$SCRIPT_DIR/sync.sh" || STATUS=$?
         else
             log "[ERROR] Speedtest step failed (exit $STATUS). Sync aborted to protect DNS."
@@ -109,7 +112,10 @@ case "$1" in
 esac
 
 rm -f "$LOCK_FILE"
-if [ "$STATUS" -ne 0 ]; then
+if [ "$DEGRADED" -eq 1 ] && [ "$STATUS" -ne 1 ]; then
+    log "[WARN] Run finished degraded (exit $STATUS): primary source unavailable, fallback data used."
+fi
+if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 2 ]; then
     log "[ERROR] Run finished with errors (exit $STATUS)."
 fi
 exit $STATUS

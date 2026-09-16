@@ -55,6 +55,8 @@
    | `DNSProvider` | `"dnspod"` | DNS 解析提供商。当前支持 `"dnspod"` (腾讯云)。 |
    | `IPSource` | `"local"` | 优选 IP 来源。`"local"` 本机测速 / `"api"` 第三方优选 API / `"saas"` 大厂影子网段优选。 |
    | `Api.IPv4` | `"https://ipdb.api.030101.xyz/?type=bestcf"` | 第三方优选 IPv4 接口地址（仅在 `IPSource` 设为 `"api"` 时生效）。 |
+   | `Api.IPv4Fallback` | 内置 GitHub 镜像 | 主接口重试仍失败时启用的兜底源数组，按顺序尝试。默认内置 [ymyuuu/IPDB](https://github.com/ymyuuu/IPDB) 的 `BestCF/bestcfv4.txt`（与主接口同源、但走 GitHub 独立基建，主接口故障时仍在每小时更新）；显式设为 `[]` 可关闭兜底。 |
+   | `Api.Retries` | `3` | 主接口失败时的重试次数（退避 5s / 10s），仅覆盖单次抖动。 |
    | `SecretId` | `"YOUR_SECRET_ID"` | 腾讯云 API 密钥 SecretId。改用下方的密钥文件时可留空。 |
    | `SecretKey` | `"YOUR_SECRET_KEY"` | 腾讯云 API 密钥 SecretKey。改用下方的密钥文件时可留空。 |
    | `Domain` | `"example.com"` | 托管的主域名。 |
@@ -94,6 +96,9 @@ sh linux/optimize.sh install
 - **自动加锁**：防止多个进程同时运行导致冲突；锁冲突与残留锁都会写进日志，不再静默跳过。
 - **智能日志**：`optimize.sh` / `speedtest.sh` / `sync.sh` 共用 `linux/common.sh` 里的统一日志函数，所有环节的输出与失败原因都落到 `output/<你的域名>/sync.log`，并自动轮转防止占用过多空间。
 - **失败可观测**：任一环节出错都会返回非零退出码并写明原因；`>>> Sync completed.` 仅在真正同步成功时输出，空跑/失败会记 `[ERROR]` 而不会谎报成功。
+- **接口降级（`IPSource=api`）**：主接口先按 `Api.Retries` 重试；仍失败则改用 `Api.IPv4Fallback`（默认内置 GitHub 镜像）。降级成功仍会正常同步 DNS，但整轮退出码为 `2`，日志里同时有 `[WARN] Degraded run`。数据源全部失败时退出码 `1`，**不动现有 DNS**。
+  - 退出码约定：`0` 正常 / `2` 降级（兜底源数据）/ `1` 失败（DNS 未被改动，保留上一轮结果）。
+  - 抓取失败会记录 HTTP 状态码与响应开头（例如 `HTTP 400` + HTML 帮助页），便于区分"接口侧故障"与"网络不通"。
 
 ## 📊 查看同步日志
 

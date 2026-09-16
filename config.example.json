@@ -3,7 +3,11 @@
     "IPSource": "api",
     "Api": {
         "IPv4": "https://ipdb.api.030101.xyz/?type=bestcf",
-        "IPv6": ""
+        "IPv6": "",
+        "IPv4Fallback": [
+            "https://raw.githubusercontent.com/ymyuuu/IPDB/main/BestCF/bestcfv4.txt"
+        ],
+        "Retries": 3
     },
     "SecretId": "YOUR_SECRET_ID",
     "SecretKey": "YOUR_SECRET_KEY",
